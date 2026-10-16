@@ -52,7 +52,7 @@ Les scénarios de génération testés utilisent une IA simulée. Les appels ré
 
 ## Direction artistique
 
-Bleu roi #2453e6, texte bleu nuit #13213c, fond #f6f7fb, surfaces blanches.
+Bleu du logo #0025cc, texte bleu nuit #13213c, fond #f6f7fb, surfaces blanches.
 Typographie système, focus clavier visible, cibles tactiles ≥44 px, mouvement réduit respecté.
 
 ## Suite

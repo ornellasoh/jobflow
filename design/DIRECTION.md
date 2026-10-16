@@ -30,3 +30,9 @@ Les comportements sur téléphone réel et les appels IA réels restent à teste
 Palette de la version JobFlow existante : bleu #2453e6, nuit #13213c, fond #f6f7fb, surfaces blanches.
 Navigation latérale ordinateur, navigation inférieure mobile. Formulaires à libellés explicites,
 aperçu séparé, états vides utiles et validation explicite de l’envoi.
+
+## Logo officiel
+
+Original fourni par la propriétaire : `web/assets/jobflow-logo.png`.
+Bleu échantillonné sur le fichier : #0025CC. Le fichier est conservé intégralement ;
+le cadrage CSS affiche le bloc logo en sidebar et le J en en-tête mobile.

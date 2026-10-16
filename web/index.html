@@ -11,7 +11,7 @@
 <body>
 <a class="skip" href="#main">Aller au contenu</a>
 <aside class="sidebar">
-  <a class="brand" href="#today"><span class="mark" aria-hidden="true">J</span><span>JobFlow<small>CV & candidatures</small></span></a>
+  <a class="brand" href="#today" aria-label="JobFlow — accueil"><span class="logo-lockup"><img src="assets/jobflow-logo.png" alt="JobFlow" width="2000" height="2000"></span><small>CV & candidatures</small></a>
   <nav aria-label="Navigation principale">
     <a href="#today" data-view="today"><span aria-hidden="true">⌂</span>Aujourd’hui</a>
     <a href="#prepare" data-view="prepare"><span aria-hidden="true">＋</span>Préparer une candidature</a>
@@ -21,7 +21,7 @@
   <div class="sidebar-bottom"><div class="goal"><label for="goal">Objectif hebdomadaire</label><div><strong id="weekly">0 / 3</strong><span>envoyées</span></div><progress id="progress" value="0" max="3"></progress><input id="goal" type="number" min="1" max="30" value="3" aria-label="Nombre de candidatures visé par semaine"></div><p class="local"><span aria-hidden="true">●</span> Données sur cet appareil</p></div>
 </aside>
 <div class="workspace">
-  <header class="topbar"><span class="mobile-brand">JobFlow</span><span id="breadcrumb">Mon espace / Aujourd’hui</span><span class="account" id="account">Mon espace</span></header>
+  <header class="topbar"><a class="mobile-brand" href="#today" aria-label="JobFlow — accueil"><span class="logo-mark" aria-hidden="true"><img src="assets/jobflow-logo.png" alt="" width="2000" height="2000"></span><span>JobFlow</span></a><span id="breadcrumb">Mon espace / Aujourd’hui</span><span class="account" id="account">Mon espace</span></header>
   <main id="main" tabindex="-1"></main>
   <p id="notice" class="notice" role="status" hidden></p>
 </div>
