@@ -1,38 +1,44 @@
-# Direction de conception
+# Direction artistique JobFlow
 
-JobFlow regroupe l’atelier de CV/lettre et le suivi personnel de candidatures.
-Références : Apple Design et Mobile Native fournies par la propriétaire du projet.
-Références HIG consultées : accessibilité, couleur, layout, typographie et saisie de données.
+Référence : charte « JobFlow · Direction artistique & spécifications UI », version 1, octobre 2026, fournie par la propriétaire du projet.
 
-Palette : fond #F5F5F7, surfaces #FFFFFF, texte #1D1D1F, accent #3155D9,
-sidebar #EBEDF2. Typographie système, titres resserrés et corps lisible.
-Texte aligné à gauche ; parcours en deux colonnes sur ordinateur, une sur mobile.
-L’élément central est la prochaine action de candidature, avec un objectif hebdomadaire discret.
-Réduire les contours imbriqués de la première proposition, réserver le bleu à l’action principale.
+## Identité
 
-Les images sont des propositions générées avec l’outil intégré ImageGen.
-Brief des prompts : interface française JobFlow + CV Generator, palette ci-dessus,
-offre d’exemple PMO Énergie, CV fondé sur le parcours source, documents à relire,
-validation des documents distincte de l’envoi, stockage local et Notion non connecté.
-Desktop : atelier à deux colonnes avec aperçu. Mobile : accueil et atelier côte à côte,
-grandes cibles tactiles, aperçu repliable et navigation inférieure.
+Une candidature à la fois. Interface calme et nette, sans dégradés, illustrations ou emojis.
+Titres Archivo 800/700, interface Inter 400/600/700. Polices chargées depuis Google Fonts ; alternatives système si indisponibles.
+Palette et tokens exacts de la charte dans `web/styles.css`, y compris les variantes sombres.
+Grille de 4 px, espaces de 4 à 48 px, arrondis de 6/12/20 px, badges en pilule.
+Logo original conservé dans `web/assets/jobflow-logo.png`, monogramme cadré en CSS à 32 × 32 px en navigation.
 
-Ces images ne sont pas des captures du prototype. L’interface Streamlit est une première
-base de fonctionnement ; les onglets mobiles, la navigation inférieure et l’aperçu paginé
-dessinés dans la maquette restent à réaliser dans l’interface web finale.
+## Écrans
 
-Contrôles effectués : navigation et exports Word, scénario d’envoi avec IA simulée,
-colonnes empilées à 390 pixels et absence de débordement horizontal dans le navigateur.
-Les comportements sur téléphone réel et les appels IA réels restent à tester.
+- Tableau : quatre colonnes À postuler, Envoyée, Entretien, Offre ; recherche ; cartes déplaçables.
+- Navigation : Tableau, Nouvelle candidature, Archives, Profil. Sidebar de 240 px ; barre basse mobile.
+- Mobile : une seule colonne visible, sélection par onglets et navigation clavier entre les statuts.
+- Détail : panneau latéral avec statut, relance, notes et historique des changements enregistrés par JobFlow.
+- Candidature : offre → documents modifiables → confirmation d’envoi et relance J+10.
+- Archives : refus conservés avec couleur sourde et libellé explicite.
+- Compteur hebdomadaire en haut à droite ; accent spark seulement si l’objectif est atteint.
+- Un seul bouton principal par étape active. Actions secondaires neutres ; icônes SVG au trait 1,5 px.
+- Notifications centrées, contraste clair/sombre, durée 4 secondes.
 
-## Interface HTML
+## Conservation des données
 
-Palette de la version JobFlow existante : bleu #2453e6, nuit #13213c, fond #f6f7fb, surfaces blanches.
-Navigation latérale ordinateur, navigation inférieure mobile. Formulaires à libellés explicites,
-aperçu séparé, états vides utiles et validation explicite de l’envoi.
+Les anciens statuts À préparer et Documents prêts restent stockés tels quels et sont regroupés visuellement dans À postuler.
+Les changements de statut passent par le même stockage local. Aucun import, aucune suppression et aucune synchronisation distante automatique.
 
-## Logo officiel
+## Limites fonctionnelles conservées
 
-Original fourni par la propriétaire : `web/assets/jobflow-logo.png`.
-Bleu échantillonné sur le fichier : #0025CC. Le fichier est conservé intégralement ;
-le cadrage CSS affiche le bloc logo en sidebar et le J en en-tête mobile.
+Les téléchargements sont au format Word. L’export PDF n’est pas encore implémenté.
+Un lien d’offre seul est enregistré mais son contenu n’est pas extrait automatiquement.
+« Envoyer la candidature » ouvre une confirmation après dépôt des documents par la personne : aucun mail ni formulaire externe n’est envoyé automatiquement.
+L’historique comprend les changements de statut dans JobFlow, pas les mails reçus.
+Le mode sombre suit la préférence du système ; les mouvements réduits sont respectés.
+Validation tactile sur téléphone réel et appels IA réels restent à faire.
+
+## Vérifications
+
+Tests des anciens statuts, calcul de semaine, relance J+10, conservation des dates et de l’historique.
+Scénario navigateur sur base temporaire isolée : édition de statut, archives, préparation manuelle, validation, confirmation d’envoi, persistance.
+Contrôle ordinateur à 1440 px et mobile à 390 px : pas de débordement horizontal, une seule colonne mobile et un seul bouton principal dans le contenu actif.
+Références HIG consultées : accessibilité, layout, couleur, typographie et glisser-déposer.

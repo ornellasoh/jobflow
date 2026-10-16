@@ -19,14 +19,16 @@ La génération transmet le CV source et le texte de l’offre au fournisseur ch
 
 ## Fonctionnalités
 
-- Accueil avec brouillons, relances dues, entretiens et objectif hebdomadaire.
+- Tableau Kanban à quatre colonnes, recherche et compteur hebdomadaire.
+- Cartes déplaçables et panneau de détail avec statut, relance, notes et historique.
+- Archives séparées pour les refus, sans suppression des candidatures.
 - Parcours offre → CV & lettre → envoi & suivi.
 - Génération Gemini ou DeepSeek ; titre, résumé et lettre éditables.
 - Faits du parcours conservés depuis le profil source.
 - Aperçu du contenu et exports Word.
 - Documents liés à la candidature et sauvegarde locale SQLite.
 - Confirmation d’envoi, date de relance, recherche et export JSON.
-- Sidebar ordinateur et navigation basse mobile.
+- Sidebar ordinateur et navigation basse mobile ; une colonne à la fois sur téléphone.
 
 ## Structure
 
@@ -46,19 +48,20 @@ Le prototype Streamlit partage la même base : `python3 -m streamlit run app.py`
 ```sh
 python3 -m unittest discover -s tests -v
 node --check web/app.js
+node --test tests/board.test.mjs
 ```
 
 Les scénarios de génération testés utilisent une IA simulée. Les appels réels nécessitent une clé valide.
 
 ## Direction artistique
 
-Bleu du logo #0025cc, texte bleu nuit #13213c, fond #f6f7fb, surfaces blanches.
-Typographie système, focus clavier visible, cibles tactiles ≥44 px, mouvement réduit respecté.
+Charte JobFlow : bleu #0025CC, texte #0B1033, fond #F6F7FB et surfaces #FFFFFF.
+Titres Archivo, interface Inter, tokens clair/sombre, boutons de 48 px, focus visible et mouvement réduit respecté.
+Voir [la direction artistique implémentée](design/DIRECTION.md).
 
 ## Suite
 
-Synchronisation JobFlow en ligne et Notion, import des anciennes candidatures, gestion complète des statuts,
-export PDF et installation PWA restent à réaliser. Validation sur téléphone réel à faire.
+Synchronisation JobFlow en ligne et Notion, import des anciennes candidatures, export PDF et installation PWA restent à réaliser. Validation sur téléphone réel à faire.
 
 Le serveur local ne doit pas être exposé sur Internet : ajouter authentification, isolation des comptes,
 protection des secrets et HTTPS avant hébergement.

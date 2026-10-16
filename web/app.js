@@ -1,87 +1,185 @@
-'use strict';
-const $ = s => document.querySelector(s);
-const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const statuses = ['À préparer','Documents prêts','Envoyée','Entretien','Offre','Refusée'];
-const labels = {today:'Aujourd’hui',prepare:'Préparer une candidature',applications:'Mes candidatures',profile:'Mon parcours'};
-let records = [], profile = {}, draft = {}, currentTab = 'cv';
+import {columns,columnOf,isArchived,weekCount,addDays,transition} from './model.mjs';
+const $ = selector => document.querySelector(selector);
+const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const paths = {
+  board:'M3 3h18v18H3z M9 3v18 M15 3v18', plus:'M12 5v14 M5 12h14',
+  archive:'M3 3h18v4H3z M5 7v14h14V7 M10 11h4',
+  user:'M20 21v-2a7 7 0 0 0-14 0v2 M16 7a4 4 0 1 1-8 0a4 4 0 0 1 8 0',
+  lock:'M5 10h14v11H5z M8 10V6a4 4 0 0 1 8 0v4',
+  file:'M14 2H5v20h14V7z M14 2v5h5 M8 12h8 M8 16h6',
+  send:'M22 2L9 15 M22 2l-7 20-6-7-7-6z', calendar:'M3 5h18v16H3z M7 3v4 M17 3v4 M3 11h18',
+  check:'M5 12l4 4L19 6', search:'M21 21l-5-5 M18 10a8 8 0 1 1-16 0a8 8 0 0 1 16 0',
+  close:'M6 6l12 12 M6 18L18 6', download:'M12 3v12 M7 10l5 5 5-5 M4 16v5h16v-5',
+  arrow:'M5 12h14 M13 6l6 6-6 6', move:'M9 5l3-3 3 3 M12 2v20 M9 19l3 3 3-3 M5 9l-3 3 3 3 M2 12h20 M19 9l3 3-3 3'
+};
+function icon(name) { return `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${paths[name] || paths.file}"/></svg>`; }
+const labels = {today:'Tableau',prepare:'Nouvelle candidature',archives:'Archives',profile:'Profil'};
+let records=[], profile={}, draft={}, stage=1, activeColumn='todo', search='', toastTimer;
 const dateISO = () => new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Paris'}).format(new Date());
-function notify(message) { $('#notice').textContent = message; $('#notice').hidden = false; }
-async function request(path, data) {
-  const response = await fetch(path, data === undefined ? {} : {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
-  if (!response.ok) { const body = await response.json(); throw new Error(body.error || 'Action impossible. Réessaie.'); }
+const fmt = day => day ? new Intl.DateTimeFormat('fr-FR',{day:'numeric',month:'short'}).format(new Date(day+'T12:00:00')) : '';
+function route() { const key=location.hash.slice(1); return key==='applications'?'today':key in labels?key:'today'; }
+function goal() { try { return Math.min(30,Math.max(1,Number(localStorage.getItem('jobflow-goal'))||3)); } catch { return 3; } }
+function notify(message) {
+  clearTimeout(toastTimer); $('#notice').textContent=message; $('#notice').hidden=false;
+  toastTimer=setTimeout(()=>{$('#notice').hidden=true;},4000);
+}
+async function request(path,data) {
+  const response=await fetch(path,data===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+  if(!response.ok) { const body=await response.json(); throw new Error(body.error || 'Action impossible. Réessaie.'); }
   return response.json();
 }
-function field(label, name, value='', type='text') { return `<div class="field"><label for="${name}">${label}</label><input id="${name}" name="${name}" type="${type}" value="${escapeHTML(value)}"></div>`; }
-function due() { return records.filter(r => r.follow_up_date && r.follow_up_date <= dateISO() && !['Offre','Refusée'].includes(r.status)); }
+async function saveRecord(record) {
+  const saved=await request('/api/applications',record);
+  records=records.some(r=>r.id===saved.id)?records.map(r=>r.id===saved.id?saved:r):[saved,...records];
+  updateGoal(); return saved;
+}
 function updateGoal() {
-  const goal = Math.min(30,Math.max(1,Number(localStorage.getItem('jobflow-goal')) || 3));
-  $('#goal').value = goal;
-  const now = new Date(dateISO()+'T12:00:00Z'); now.setUTCDate(now.getUTCDate() - (now.getUTCDay()+6)%7);
-  const start = now.toISOString().slice(0,10);
-  const count = records.filter(r => r.applied_date >= start && r.applied_date <= dateISO()).length;
-  $('#weekly').textContent = `${count} / ${goal}`; $('#progress').max = goal; $('#progress').value = Math.min(count,goal);
+  const count=weekCount(records,dateISO()), target=goal(); $('#goal').value=target;
+  $('#weekly').textContent=`${count}/${target} cette semaine${count>=target?' ✓':''}`;
+  $('#weekly').classList.toggle('reached',count>=target);
 }
-function route() { const key = location.hash.slice(1); return key in labels ? key : 'today'; }
-function row(r) { return `<div class="row"><div class="row-main"><strong>${escapeHTML(r.company)}</strong><small>${escapeHTML(r.role)}</small>${r.follow_up_date ? `<small>Relance : ${escapeHTML(r.follow_up_date)}</small>`:''}</div><span class="status">${escapeHTML(r.status)}</span><button data-open="${escapeHTML(r.id)}" aria-label="Ouvrir ${escapeHTML(r.company)}">Ouvrir</button></div>`; }
-function render() {
-  const view = route();
-  document.querySelectorAll('[data-view]').forEach(a => { a.classList.toggle('active',a.dataset.view===view); if(a.dataset.view===view)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current'); });
-  $('#breadcrumb').textContent = `Mon espace / ${labels[view]}`;
-  $('#account').textContent = profile.candidate_name && profile.candidate_name !== 'Prénom Nom' ? profile.candidate_name.split(' ')[0] : 'Mon espace';
-  updateGoal();
-  if(view === 'today') home();
-  if(view === 'prepare') prepare();
-  if(view === 'applications') applications();
-  if(view === 'profile') renderProfile();
-  document.querySelectorAll('[data-open]').forEach(b => b.onclick = () => {draft = structuredClone(records.find(r=>r.id===b.dataset.open));location.hash='prepare';if(route()==='prepare')render();});
+function bind(id,callback) {
+  const element=$('#'+id);
+  if(element)element.onclick=async()=>{try{await callback();}catch(e){notify(e.message);}};
 }
-function home() {
-  const drafts = records.filter(r=>['À préparer','Documents prêts'].includes(r.status));
-  $('#main').innerHTML = `<section class="intro"><div><h1>Une action à la fois.</h1><p>Ton parcours, tes candidatures et tes prochaines relances au même endroit.</p></div><button class="primary" id="new">＋ Préparer une candidature</button></section>
-  <section class="stats" aria-label="Ton activité">${[['▤','À préparer',drafts.length],['◷','Relances dues',due().length],['◎','Entretiens',records.filter(r=>r.status==='Entretien').length]].map(([icon,label,count])=>`<article class="stat"><div class="stat-icon" aria-hidden="true">${icon}</div><div><span>${label}</span><strong>${count}</strong></div></article>`).join('')}</section>
-  <div class="grid"><section class="panel"><div class="panel-head"><h2>À faire aujourd’hui</h2><p>La prochaine action suffit pour avancer.</p></div>${due().length?due().map(row).join(''):'<div class="empty"><div class="empty-icon" aria-hidden="true">✓</div><h3>Aucune relance due</h3><p>Tu peux avancer sur ta prochaine candidature à ton rythme.</p></div>'}</section><section class="panel"><div class="panel-head"><h2>Reprendre un brouillon</h2><p>Continue là où tu en étais.</p></div>${drafts.length?drafts.map(row).join(''):'<div class="empty"><div class="empty-icon" aria-hidden="true">▤</div><h3>Ta prochaine candidature commence ici</h3><p>Ajoute une offre pour préparer tes documents et conserver ton suivi.</p></div>'}</section></div>`;
-  $('#new').onclick=()=>{draft={};location.hash='prepare';};
+function field(label,id,value='',type='text') {
+  return `<div class="field"><label for="${id}">${label}</label><input id="${id}" type="${type}" value="${esc(value)}"><p id="error-${id}" class="error" hidden></p></div>`;
+}
+function error(id,message) {
+  const input=$('#'+id), text=$('#error-'+id);
+  if(input)input.setAttribute('aria-invalid','true');
+  if(text){text.textContent=message;text.hidden=false;input.setAttribute('aria-describedby',text.id);}
+  input?.focus();
 }
 function collect() {
-  for(const key of ['company','role','offer_url','offer_text','letter_text','follow_up_date','notes']) if($('#'+key))draft[key]=$('#'+key).value;
-  if(draft.cv){ draft.cv.cv_title=$('#cv_title')?.value || draft.cv.cv_title; draft.cv.seo_title=draft.cv.cv_title; draft.cv.accroche_objective=$('#summary')?.value ?? draft.cv.accroche_objective; }
+  for(const key of ['company','role','offer_url','offer_text','letter_text','follow_up_date','notes'])if($('#'+key))draft[key]=$('#'+key).value;
+  if(draft.cv){
+    draft.cv.cv_title=$('#cv_title')?.value??draft.cv.cv_title;
+    draft.cv.seo_title=draft.cv.cv_title;
+    draft.cv.accroche_objective=$('#summary')?.value??draft.cv.accroche_objective;
+  }
 }
-async function persist(status, collectFields = true) {
-  if(collectFields)collect();
-  if(!draft.company?.trim() || !draft.role?.trim())throw new Error('Renseigne l’entreprise et le poste.');
-  if(status)draft.status=status;
-  const saved=await request('/api/applications',draft);draft=saved;records=await request('/api/applications');updateGoal();return saved;
+function badge(record) {
+  const key=columnOf(record), label=key==='closed'?'Refus':columns.find(c=>c.key===key).label;
+  return `<span class="badge ${key}">${key==='offer'?icon('check'):''}${label}</span>`;
 }
-function preview() {
-  if(!draft.cv)return '<div class="empty"><div class="empty-icon" aria-hidden="true">▤</div><h3>Tes documents apparaîtront ici</h3><p>Colle une offre puis prépare ton CV et ta lettre à partir de ton parcours.</p></div>';
-  if(currentTab==='letter')return `<div class="sheet"><h2>Lettre de motivation</h2>${(draft.letter_text||'').split('\n\n').map(p=>`<p>${escapeHTML(p)}</p>`).join('')}</div>`;
-  return `<div class="sheet"><h2>${escapeHTML(profile.candidate_name)}</h2><p>${escapeHTML(draft.cv.cv_title)}</p><h3>Profil</h3><p>${escapeHTML(draft.cv.accroche_objective)}</p><h3>Expériences</h3>${(draft.cv.experiences||[]).map(e=>`<p><strong>${escapeHTML(e.role)}</strong><br>${escapeHTML(e.company)}<br>${escapeHTML(e.period)}</p><ul>${(e.bullets||[]).map(b=>`<li>${escapeHTML(b)}</li>`).join('')}</ul>`).join('')}<h3>Compétences</h3><p>${escapeHTML((draft.cv.skills||[]).join(' · '))}</p></div>`;
+function card(record) {
+  return `<button class="candidate" draggable="true" data-open="${esc(record.id)}" aria-label="${esc(record.role)} chez ${esc(record.company)}"><h3>${esc(record.role)}</h3><p>${esc(record.company)}${record.applied_date?' · '+fmt(record.applied_date):''}</p><div class="card-footer">${badge(record)}${record.follow_up_date?`<time datetime="${esc(record.follow_up_date)}">Relance ${fmt(record.follow_up_date)}</time>`:''}</div></button>`;
+}
+function newApplication(){collect();draft={};stage=1;if(route()==='prepare')render();else location.hash='prepare';}
+function render() {
+  const view=route();
+  document.querySelectorAll('[data-view]').forEach(a=>{a.classList.toggle('active',a.dataset.view===view);if(a.dataset.view===view)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');});
+  $('#breadcrumb').textContent=`Mon espace / ${labels[view]}`;
+  $('#account').textContent=(profile.candidate_name||'Mon espace').split(' ').map(n=>n[0]).slice(0,2).join('');
+  updateGoal();
+  if(view==='today')board();if(view==='prepare')prepare();if(view==='archives')archives();if(view==='profile')renderProfile();
+}
+function board() {
+  const active=records.filter(r=>!isArchived(r));
+  $('#main').innerHTML=`<section class="intro"><div><h1>Mes candidatures</h1><p>Une candidature à la fois.</p></div><button class="primary" id="new">${icon('plus')}Ajouter une offre</button></section>
+  <div class="toolbar"><div class="search">${icon('search')}<input id="search" type="search" value="${esc(search)}" aria-label="Rechercher une candidature" placeholder="Rechercher une candidature"></div><p class="small">${active.length} candidature${active.length>1?'s':''} en cours</p></div>
+  ${!active.length?'<section class="empty"><h2>Le prochain pas commence ici.</h2><p>Aucune candidature cette semaine. Une seule suffit pour relancer la machine.</p></section>':''}
+  <div class="mobile-statuses" role="tablist" aria-label="Statut des candidatures">${columns.map(c=>`<button role="tab" data-column="${c.key}" aria-selected="${activeColumn===c.key}" aria-controls="column-${c.key}">${c.label} (${active.filter(r=>columnOf(r)===c.key).length})</button>`).join('')}</div>
+  <div class="board" id="board"></div><p class="board-note">${icon('move')}<span class="desktop-hint">Déplace une carte pour changer son statut, ou ouvre-la pour modifier les détails.</span><span class="mobile-hint">Ouvre une carte pour modifier son statut ou sa prochaine relance.</span></p>`;
+  bind('new',newApplication);
+  $('#search').oninput=()=>{search=$('#search').value;renderColumns();};
+  document.querySelectorAll('[data-column]').forEach(b=>b.onclick=()=>{activeColumn=b.dataset.column;document.querySelectorAll('[data-column]').forEach(t=>t.setAttribute('aria-selected',String(t===b)));document.querySelectorAll('.column').forEach(c=>c.classList.toggle('is-visible',c.dataset.status===activeColumn));});
+  const tabs=[...document.querySelectorAll('[data-column]')];
+  tabs.forEach((t,i)=>t.onkeydown=e=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();const next=e.key==='Home'?0:e.key==='End'?tabs.length-1:(i+(e.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;tabs[next].click();tabs[next].focus();});
+  renderColumns();
+}
+function renderColumns() {
+  const filtered=records.filter(r=>!isArchived(r)&&(r.company+' '+r.role).toLocaleLowerCase('fr').includes(search.toLocaleLowerCase('fr')));
+  $('#board').innerHTML=columns.map(c=>{const list=filtered.filter(r=>columnOf(r)===c.key);return `<section id="column-${c.key}" class="column ${c.key} ${activeColumn===c.key?'is-visible':''}" data-status="${c.key}" aria-label="${c.label}"><div class="column-heading"><span class="dot"></span><h2 class="label">${c.label}</h2><span class="count">${list.length}</span></div><div class="cards">${list.map(card).join('')}${!list.length?`<div class="column-empty">${search?'Aucun résultat.':{'todo':'Les offres à préparer apparaîtront ici.','sent':'Tes candidatures envoyées apparaîtront ici.','interview':'Tes prochains échanges apparaîtront ici.','offer':'Les propositions reçues apparaîtront ici.'}[c.key]}</div>`:''}</div></section>`;}).join('');
+  document.querySelectorAll('[data-open]').forEach(b=>{
+    b.onclick=()=>openDetail(b.dataset.open);
+    b.ondragstart=e=>{e.dataTransfer.setData('text/plain',b.dataset.open);e.dataTransfer.effectAllowed='move';b.classList.add('dragging');};
+    b.ondragend=()=>{b.classList.remove('dragging');document.querySelectorAll('.drop-target').forEach(c=>c.classList.remove('drop-target'));};
+  });
+  document.querySelectorAll('.column').forEach(column=>{
+    column.ondragover=e=>{e.preventDefault();e.dataTransfer.dropEffect='move';column.classList.add('drop-target');};
+    column.ondragleave=e=>{if(!column.contains(e.relatedTarget))column.classList.remove('drop-target');};
+    column.ondrop=async e=>{e.preventDefault();column.classList.remove('drop-target');const record=records.find(r=>r.id===e.dataTransfer.getData('text/plain'));if(!record)return;const status=columns.find(c=>c.key===column.dataset.status).status;if(columnOf(record)===column.dataset.status)return;try{await saveRecord(transition(record,status,dateISO()));render();notify('Statut mis à jour.');}catch(err){notify(err.message);}};
+  });
+}
+function editorPreview(cv) {
+  return `<div class="sheet"><h3>${esc(profile.candidate_name)}</h3><p>${esc(cv.cv_title)}</p><h3>Profil</h3><p>${esc(cv.accroche_objective)}</p><h3>Expériences</h3>${(cv.experiences||[]).map(e=>`<p><strong>${esc(e.role)}</strong><br>${esc(e.company)} · ${esc(e.period)}</p><ul>${(e.bullets||[]).map(b=>`<li>${esc(b)}</li>`).join('')}</ul>`).join('')}<h3>Compétences</h3><p>${esc((cv.skills||[]).join(' · '))}</p></div>`;
 }
 function prepare() {
-  $('#main').innerHTML=`<section class="intro"><div><h1>Préparer une candidature</h1><p>Une offre, tes preuves, des documents prêts à relire.</p></div><span class="save-state">${draft.id?'Brouillon enregistré sur cet appareil':'Nouveau brouillon'}</span></section>
-  <ol class="stepper" aria-label="Étapes"><li class="${!draft.cv?'current':''}"><b>1</b>Offre</li><li class="${draft.cv?'current':''}"><b>2</b>CV & lettre</li><li><b>3</b>Envoi & suivi</li></ol>
-  <div class="grid"><div class="stack"><section class="panel"><div class="panel-head"><h2>L’offre sélectionnée</h2><p>Ajoute les informations utiles à ta candidature.</p></div><div class="panel-body"><div class="fields">${field('Entreprise *','company',draft.company)}${field('Poste *','role',draft.role)}</div>${field('Lien de l’offre','offer_url',draft.offer_url,'url')}<div class="field"><label for="offer_text">Texte de l’offre</label><textarea id="offer_text" rows="6" placeholder="Colle ici le texte de l’offre…">${escapeHTML(draft.offer_text)}</textarea><p class="hint">Le lien est conservé pour le suivi. Colle le texte pour l’analyse.</p></div><details><summary>Réglages de génération</summary><p class="hint"><a href="api-keys.html" target="_blank" rel="noopener noreferrer">Comment obtenir ma clé Gemini ou DeepSeek ?</a></p><div class="fields"><div class="field"><label for="provider">Moteur IA</label><select id="provider"><option>Gemini</option><option>DeepSeek</option></select></div>${field('Clé API · non enregistrée','api_key','','password')}</div><p class="hint">La génération transmet ton CV source et le texte de l’offre au fournisseur choisi.</p></details><div class="actions"><button class="primary" id="generate">Préparer mon CV et ma lettre</button><button id="save">Enregistrer le brouillon</button></div></div></section>
-  ${draft.cv?`<section class="panel"><div class="panel-head"><h2>Documents à relire</h2><p>Vérifie les propositions avant de les utiliser.</p></div><div class="panel-body">${field('Titre du CV','cv_title',draft.cv.cv_title)}<div class="field"><label for="summary">Résumé professionnel</label><textarea id="summary">${escapeHTML(draft.cv.accroche_objective)}</textarea></div><div class="field"><label for="letter_text">Lettre de motivation</label><textarea id="letter_text" rows="9">${escapeHTML(draft.letter_text)}</textarea></div><p class="hint">Expériences, dates, formations et compétences conservées depuis ton CV source.</p><button class="primary" id="validate">Valider les documents</button></div></section>`:''}
-  <section class="panel"><div class="panel-head"><h2>Envoi & suivi</h2><p>Confirme l’envoi une fois ta candidature déposée.</p></div><div class="panel-body">${field('Date de relance','follow_up_date',draft.follow_up_date,'date')}<div class="field"><label for="notes">Notes</label><textarea id="notes" rows="3">${escapeHTML(draft.notes)}</textarea></div><label class="check"><input id="sent" type="checkbox">J’ai envoyé cette candidature aujourd’hui</label><button id="confirm" class="secondary">Enregistrer l’envoi</button></div></section></div>
-  <aside class="preview panel"><div class="panel-head"><h2>Aperçu des documents</h2><p>Le contenu avant téléchargement.</p></div><div class="panel-body"><div class="tabs" role="tablist" aria-label="Document à prévisualiser"><button id="tab-cv" role="tab" aria-selected="${currentTab==='cv'}">CV adapté</button><button id="tab-letter" role="tab" aria-selected="${currentTab==='letter'}">Lettre</button></div><div id="preview">${preview()}</div>${draft.cv?'<div class="actions" style="margin-top:18px"><button id="download-cv" class="secondary">↓ CV Word</button><button id="download-letter" class="secondary">↓ Lettre Word</button></div>':''}<p class="source-note">Stockage local · Notion non connecté</p></div></aside></div>`;
-  const bind=(id,fn)=>{const el=$('#'+id);if(el)el.onclick=()=>Promise.resolve().then(fn).catch(e=>notify(e.message));};
-  bind('save',async()=>{await persist();notify('Brouillon enregistré.');render();});
-  bind('validate',async()=>{await persist(draft.status && draft.status!=='À préparer'?draft.status:'Documents prêts');notify('Documents validés. Tu peux postuler, puis confirmer l’envoi.');render();});
-  bind('confirm',async()=>{if(!$('#sent').checked)throw new Error('Confirme l’envoi après avoir postulé.');collect();if(draft.follow_up_date && draft.follow_up_date<dateISO())throw new Error('Choisis une date de relance à partir d’aujourd’hui.');draft.applied_date=dateISO();await persist('Envoyée');notify('Envoi et relance enregistrés.');render();});
-  bind('generate',async()=>{collect();if(!draft.company?.trim()||!draft.role?.trim())throw new Error('Renseigne l’entreprise et le poste.');const button=$('#generate');button.disabled=true;button.textContent='Préparation en cours…';try{const result=await request('/api/generate',{offer_text:draft.offer_text,provider:$('#provider').value,api_key:$('#api_key').value});draft={...draft,...result};await persist(undefined,false);render();notify('Documents préparés. Relis-les avant de postuler.');}finally{if(button.isConnected){button.disabled=false;button.textContent='Préparer mon CV et ma lettre';}}});
-  for(const tab of ['cv','letter'])bind('tab-'+tab,()=>{collect();currentTab=tab;$('#preview').innerHTML=preview();document.querySelectorAll('[role="tab"]').forEach(b=>b.setAttribute('aria-selected',String(b.id==='tab-'+tab)));});
-  for(const kind of ['cv','letter'])bind('download-'+kind,async()=>{collect();const response=await fetch('/api/document',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...draft,kind})});if(!response.ok)throw new Error('Export impossible. Vérifie le document et réessaie.');download(await response.blob(),kind==='cv'?'CV.docx':'Lettre.docx');});
+  $('#main').innerHTML=`<section class="intro"><div><h1>Nouvelle candidature</h1><p>De l’offre au prochain échange.</p></div>${draft.id?'<span class="small">Brouillon enregistré</span>':''}</section>
+    <ol class="stepper" aria-label="Étapes">${['Offre','CV & lettre','Envoi & suivi'].map((label,i)=>`<li class="${stage===i+1?'current':''}" ${stage===i+1?'aria-current="step"':''}><b>${i+1}</b>${label}</li>`).join('')}</ol><div id="stage"></div>`;
+  if(stage===1)offerStep();else if(stage===2)documentsStep();else sendStep();
 }
-function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
-function applications(){
-  $('#main').innerHTML=`<section class="intro"><div><h1>Mes candidatures</h1><p>Retrouve tes documents et ta prochaine action.</p></div><button id="export">Exporter mes données</button></section><div class="searchbar"><input id="search" aria-label="Rechercher une entreprise ou un poste" placeholder="Rechercher une entreprise ou un poste"><select id="filter" aria-label="Filtrer par statut"><option>Tous les statuts</option>${statuses.map(s=>`<option>${s}</option>`).join('')}</select></div><section class="panel" id="results"></section>`;
-  function filter(){const query=$('#search').value.toLocaleLowerCase('fr'),status=$('#filter').value;const list=records.filter(r=>(r.company+' '+r.role).toLocaleLowerCase('fr').includes(query)&&(status==='Tous les statuts'||r.status===status));$('#results').innerHTML=list.length?list.map(row).join(''):'<div class="empty"><h2>Aucune candidature à afficher</h2><p>Prépare ta première candidature ou modifie tes filtres.</p></div>';document.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>{draft=structuredClone(records.find(r=>r.id===b.dataset.open));location.hash='prepare';});}
-  $('#search').oninput=filter;$('#filter').onchange=filter;$('#export').onclick=()=>download(new Blob([JSON.stringify(records,null,2)],{type:'application/json'}),'jobflow.json');filter();
+function offerStep() {
+  $('#stage').innerHTML=`<section class="panel offer-panel"><h2>Quelle offre t’intéresse ?</h2><p>Ajoute une offre pour préparer une candidature qui te ressemble.</p><div class="field"><label for="offer_text">Colle le lien ou le texte de l’offre</label><textarea id="offer_text" rows="8" placeholder="Intitulé du poste, missions, compétences recherchées…">${esc(draft.offer_text||draft.offer_url)}</textarea><p id="error-offer_text" class="error" hidden></p><p class="hint">Pour l’analyse IA, colle la description complète. Un lien seul sera conservé pour le suivi.</p></div>
+  <details><summary>Informations de suivi</summary><div class="fields">${field('Entreprise','company',draft.company)}${field('Poste','role',draft.role)}</div>${field('Lien de l’offre','offer_url',draft.offer_url,'url')}</details>
+  <details><summary>Réglages de génération</summary><div class="fields"><div class="field"><label for="provider">Moteur IA</label><select id="provider"><option>Gemini</option><option>DeepSeek</option></select></div>${field('Clé API · non enregistrée','api_key','','password')}</div><p class="hint"><a href="api-keys.html" target="_blank" rel="noopener noreferrer">Comment obtenir une clé Gemini ou DeepSeek ?</a></p><p class="hint">Ton parcours et l’offre sont transmis au fournisseur choisi lors de la génération.</p></details>
+  <div class="action-footer"><button class="ghost" id="manual">Continuer sans IA</button><button class="primary" id="generate">Préparer ma candidature</button></div><p id="generation-error" class="error" role="alert" hidden></p></section>`;
+  bind('manual',()=>{collect();if(!draft.offer_text?.trim()){error('offer_text','Ajoute une offre pour continuer.');return;}draft.cv ||= structuredClone(profile);draft.cv.cv_title ||= draft.role || profile.default_title;draft.cv.accroche_objective ||= '';draft.letter_text ||= '';stage=2;render();});
+  bind('generate',async()=>{
+    collect();if(!draft.offer_text?.trim()){error('offer_text','Colle le texte de l’offre.');return;}
+    if(/^https?:\/\/\S+$/.test(draft.offer_text.trim())){draft.offer_url=draft.offer_text.trim();error('offer_text','Lien conservé. Colle aussi la description de l’offre pour l’analyse.');return;}
+    if(!$('#api_key').value.trim()){$('#api_key').closest('details').open=true;error('api_key','Renseigne ta clé API, ou choisis « Continuer sans IA ».');return;}
+    const button=$('#generate');button.disabled=true;button.innerHTML='<span class="spinner" aria-hidden="true"></span>Préparation…';
+    try{
+      const result=await request('/api/generate',{offer_text:draft.offer_text,provider:$('#provider').value,api_key:$('#api_key').value});
+      draft={...draft,...result,company:draft.company||result.company,role:draft.role||result.role};stage=2;render();notify('Documents préparés. À toi de les relire.');
+    }catch(e){$('#generation-error').textContent=e.message;$('#generation-error').hidden=false;}
+    finally{if(button.isConnected){button.disabled=false;button.textContent='Préparer ma candidature';}}
+  });
+}
+function documentsStep() {
+  const cv=draft.cv;
+  $('#stage').innerHTML=`<div class="summary-card"><p><strong>${esc(draft.role||'Candidature à préciser')}</strong>${draft.company?' · '+esc(draft.company):''}</p><button class="ghost" id="back-offer">Modifier l’offre</button></div>
+  <div class="fields">${field('Entreprise *','company',draft.company)}${field('Poste *','role',draft.role)}</div>
+  <div class="editor-grid"><section class="panel"><h2>Ton CV adapté</h2><p class="small">Le titre et l’accroche s’adaptent. Ton parcours reste intact.</p>${field('Titre du CV','cv_title',cv.cv_title||cv.seo_title||draft.role)}<div class="field"><label for="summary">Résumé professionnel</label><textarea id="summary" rows="5">${esc(cv.accroche_objective)}</textarea></div><button id="download-cv">${icon('download')}Télécharger le CV Word</button><details><summary>Aperçu du CV</summary>${editorPreview(cv)}</details></section>
+  <section class="panel"><h2>Ta lettre de motivation</h2><p class="small">Relie les besoins du poste à tes réalisations.</p><div class="field"><label for="letter_text">Texte de la lettre</label><textarea id="letter_text" rows="13">${esc(draft.letter_text)}</textarea></div><button id="download-letter">${icon('download')}Télécharger la lettre Word</button></section></div>
+  <div class="action-footer"><button class="ghost" id="save">Enregistrer le brouillon</button><button class="primary" id="validate">Valider les documents${icon('arrow')}</button></div>`;
+  bind('back-offer',()=>{collect();stage=1;render();});
+  bind('save',async()=>{if(!validateIdentity())return;draft=await saveRecord(draft);notify('Brouillon enregistré.');});
+  bind('validate',async()=>{if(!validateIdentity())return;draft=await saveRecord({...draft,status:!draft.status||draft.status==='À préparer'?'Documents prêts':draft.status});stage=3;render();});
+  bindDownloads();
+}
+function validateIdentity(){
+  collect();if(!draft.company?.trim()){error('company','Renseigne l’entreprise.');return false;}if(!draft.role?.trim()){error('role','Renseigne le poste.');return false;}return true;
+}
+function sendStep() {
+  $('#stage').innerHTML=`<section class="panel offer-panel"><h2>Prête pour le prochain pas ?</h2><p><strong>${esc(draft.role)}</strong> · ${esc(draft.company)}</p><p>Télécharge tes documents, puis dépose ta candidature sur le site de l’entreprise. JobFlow n’envoie pas de mail à ta place.</p><div class="actions"><button id="download-cv">${icon('download')}CV Word</button><button id="download-letter">${icon('download')}Lettre Word</button>${safeURL(draft.offer_url)?`<a class="button" href="${esc(draft.offer_url)}" target="_blank" rel="noopener noreferrer">Ouvrir l’offre</a>`:''}</div><details open><summary>Planifier le suivi</summary>${field('Date de relance suggérée','follow_up_date',draft.follow_up_date||addDays(dateISO(),10),'date')}<div class="field"><label for="notes">Notes</label><textarea id="notes" rows="3">${esc(draft.notes)}</textarea></div></details><div class="action-footer"><button class="ghost" id="back-docs">Revoir les documents</button><button class="primary" id="send">Envoyer la candidature${icon('send')}</button></div><p class="hint">Ce bouton ouvre la confirmation de ton envoi, sans transmission automatique.</p></section>`;
+  bind('back-docs',()=>{collect();stage=2;render();});bind('send',()=>{collect();confirmSend();});bindDownloads();
+}
+function confirmSend(){
+  const dialog=$('#send-dialog');dialog.innerHTML=`<div class="dialog-head"><h2 id="send-title">As-tu envoyé ta candidature ?</h2><button id="close-send" class="ghost icon-button" aria-label="Fermer">${icon('close')}</button></div><p>Confirme après avoir déposé tes documents auprès de ${esc(draft.company)}. La date d’envoi sera enregistrée à aujourd’hui.</p><label class="check"><input type="checkbox" id="sent-check">J’ai envoyé cette candidature.</label><div class="action-footer"><button class="ghost" id="cancel-send">Pas encore</button><button class="primary" id="confirm-send" disabled>Confirmer l’envoi</button></div>`;
+  dialog.showModal();$('#sent-check').onchange=()=>{$('#confirm-send').disabled=!$('#sent-check').checked;};
+  bind('close-send',()=>dialog.close());bind('cancel-send',()=>dialog.close());
+  bind('confirm-send',async()=>{
+    if(!$('#sent-check').checked)return;
+    if(draft.follow_up_date && draft.follow_up_date<dateISO())throw new Error('Choisis une date de relance à partir d’aujourd’hui.');
+    draft=await saveRecord(transition(draft,'Envoyée',dateISO()));dialog.close();const count=weekCount(records,dateISO());notify(count>=goal()?`${count}/${goal()} cette semaine. Beau travail.`:`Envoyée. ${count}/${goal()} cette semaine.`);location.hash='today';
+  });
+}
+function safeURL(url){try{return ['https:','http:'].includes(new URL(url).protocol);}catch{return false;}}
+function bindDownloads(){for(const kind of ['cv','letter'])bind('download-'+kind,async()=>{collect();const response=await fetch('/api/document',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...draft,kind})});if(!response.ok)throw new Error('Export impossible. Réessaie après avoir vérifié le document.');download(await response.blob(),kind==='cv'?'CV.docx':'Lettre.docx');});}
+function download(blob,name){const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=name;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+function openDetail(id){
+  const record=records.find(r=>r.id===id);if(!record)return;
+  const dialog=$('#detail');
+  dialog.innerHTML=`<div class="dialog-head"><div><h2 id="detail-title">${esc(record.role)}</h2><p>${esc(record.company)}</p></div><button class="ghost icon-button" id="close-detail" aria-label="Fermer le détail">${icon('close')}</button></div>${badge(record)}${safeURL(record.offer_url)?`<p><a href="${esc(record.offer_url)}" target="_blank" rel="noopener noreferrer">Consulter l’offre</a></p>`:''}<div class="field" style="margin-top:24px"><label for="detail-status">Statut</label><select id="detail-status">${['À préparer','Documents prêts','Envoyée','Entretien','Offre','Refusée'].map(s=>`<option value="${esc(s)}" ${record.status===s?'selected':''}>${s==='À préparer'?'À postuler':s==='Refusée'?'Refus':s}</option>`).join('')}</select></div>${field('Date de relance','detail-follow',record.follow_up_date||addDays(record.applied_date||dateISO(),10),'date')}<div class="field"><label for="detail-notes">Notes</label><textarea id="detail-notes" rows="4">${esc(record.notes)}</textarea></div><div class="actions"><button class="primary" id="save-detail">Enregistrer</button><button class="ghost" id="edit-documents">Reprendre les documents</button></div><details><summary>Historique</summary>${record.history?.length?`<ul class="history">${record.history.map(h=>`<li>${esc(h.date)} · ${esc(h.action)}</li>`).join('')}</ul>`:'<p class="small">Les prochains changements de statut apparaîtront ici.</p>'}</details>`;
+  dialog.showModal();bind('close-detail',()=>dialog.close());
+  bind('edit-documents',()=>{dialog.close();collect();draft=structuredClone(record);stage=draft.cv?2:1;location.hash='prepare';if(route()==='prepare')render();});
+  bind('save-detail',async()=>{let next=transition(record,$('#detail-status').value,dateISO());next.follow_up_date=$('#detail-follow').value;next.notes=$('#detail-notes').value;await saveRecord(next);dialog.close();render();notify(next.status==='Refusée'?'Archivée. Chaque refus rapproche du bon poste.':'Candidature mise à jour.');});
+}
+function archives(){
+  const archived=records.filter(isArchived);
+  $('#main').innerHTML=`<section class="intro"><div><h1>Archives</h1><p>Une étape se termine. La suite reste à écrire.</p></div><button id="export" class="ghost">${icon('download')}Exporter mes données</button></section>${archived.length?`<div class="archives">${archived.map(card).join('')}</div>`:'<section class="empty"><h2>Aucune candidature archivée</h2><p>Les candidatures clôturées resteront ici, sans encombrer ton tableau.</p></section>'}`;
+  document.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>openDetail(b.dataset.open));
+  bind('export',()=>download(new Blob([JSON.stringify(records,null,2)],{type:'application/json'}),'jobflow.json'));
 }
 function renderProfile(){
-  $('#main').innerHTML=`<section class="intro"><div><h1>Mon parcours</h1><p>La source de référence de tes candidatures.</p></div></section><section class="panel"><div class="panel-head"><h2>${escapeHTML(profile.candidate_name||'Mon profil')}</h2><p>${escapeHTML(profile.default_title)}</p></div><div class="panel-body">${(profile.experiences||[]).length?(profile.experiences||[]).map(e=>`<details open><summary>${escapeHTML(e.role)} · ${escapeHTML(e.company)}</summary><p>${escapeHTML(e.period)}</p><ul>${(e.bullets||[]).map(b=>`<li>${escapeHTML(b)}</li>`).join('')}</ul></details>`).join(''):'<p>Ajoute ton profil dans le fichier local data/profile.json pour personnaliser les documents. Un modèle est fourni dans profile.example.json.</p>'}<p class="source-note">Le profil réel reste sur cet appareil et n’est pas publié dans le dépôt GitHub.</p></div></section>`;
+  $('#main').innerHTML=`<section class="intro"><div><h1>Profil</h1><p>Ton parcours est le point de départ de chaque candidature.</p></div></section><section class="panel profile-details"><h2>${esc(profile.candidate_name||'Mon profil')}</h2><p>${esc(profile.default_title)}</p>${profile.experiences?.length?profile.experiences.map(e=>`<details><summary>${esc(e.role)} · ${esc(e.company)}</summary><p class="small">${esc(e.period)}</p><ul>${(e.bullets||[]).map(b=>`<li>${esc(b)}</li>`).join('')}</ul></details>`).join(''):'<p>Ton parcours n’est pas encore renseigné. Ajoute ton profil local pour personnaliser tes documents.</p>'}<p class="hint">Vérifie les dates et les réalisations de ton parcours avant de préparer tes documents.</p></section>`;
 }
-$('#goal').onchange=()=>{localStorage.setItem('jobflow-goal',String(Math.min(30,Math.max(1,Number($('#goal').value)||3))));updateGoal();};
+for(const element of document.querySelectorAll('[data-icon]'))element.insertAdjacentHTML('afterbegin',icon(element.dataset.icon));
+$('#goal').onchange=()=>{try{localStorage.setItem('jobflow-goal',String(Math.min(30,Math.max(1,Number($('#goal').value)||3))));}catch{}updateGoal();};
 window.addEventListener('hashchange',()=>{collect();render();});
-window.addEventListener('beforeunload',e=>{if(route()==='prepare' && $('#company')?.value && !draft.id){e.preventDefault();e.returnValue='';}});
-Promise.all([request('/api/applications'),request('/api/profile')]).then(([a,p])=>{records=a;profile=p;render();}).catch(e=>{$('#main').innerHTML='<h1>Connexion indisponible</h1><p>Lance le serveur local JobFlow puis recharge cette page.</p>';notify(e.message);});
+window.addEventListener('beforeunload',e=>{if(route()==='prepare' && $('#offer_text')?.value && !draft.id){e.preventDefault();e.returnValue='';}});
+Promise.all([request('/api/applications'),request('/api/profile')]).then(([a,p])=>{records=a;profile=p;render();}).catch(e=>{$('#main').innerHTML='<h1>Connexion indisponible</h1><p>Recharge la page une fois le serveur JobFlow disponible.</p>';notify(e.message);});

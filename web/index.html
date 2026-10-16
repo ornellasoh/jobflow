@@ -3,28 +3,44 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#f6f7fb">
-  <title>JobFlow · CV & candidatures</title>
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F6F7FB">
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0A0E24">
+  <title>JobFlow · Une candidature à la fois.</title>
   <link rel="stylesheet" href="styles.css">
-  <script src="app.js" defer></script>
+  <script src="app.js" type="module"></script>
 </head>
 <body>
 <a class="skip" href="#main">Aller au contenu</a>
 <aside class="sidebar">
-  <a class="brand" href="#today" aria-label="JobFlow — accueil"><span class="logo-lockup"><img src="assets/jobflow-logo.png" alt="JobFlow" width="2000" height="2000"></span><small>CV & candidatures</small></a>
+  <a class="brand" href="#today" aria-label="JobFlow — accueil"><span class="logo-mark" aria-hidden="true"><img src="assets/jobflow-logo.png" alt="" width="2000" height="2000"></span><span>JobFlow</span></a>
   <nav aria-label="Navigation principale">
-    <a href="#today" data-view="today"><span aria-hidden="true">⌂</span>Aujourd’hui</a>
-    <a href="#prepare" data-view="prepare"><span aria-hidden="true">＋</span>Préparer une candidature</a>
-    <a href="#applications" data-view="applications"><span aria-hidden="true">▤</span>Mes candidatures</a>
-    <a href="#profile" data-view="profile"><span aria-hidden="true">◎</span>Mon parcours</a>
+    <a href="#today" data-view="today" data-icon="board">Tableau</a>
+    <a href="#prepare" data-view="prepare" data-icon="plus">Nouvelle candidature</a>
+    <a href="#archives" data-view="archives" data-icon="archive">Archives</a>
+    <a href="#profile" data-view="profile" data-icon="user">Profil</a>
   </nav>
-  <div class="sidebar-bottom"><div class="goal"><label for="goal">Objectif hebdomadaire</label><div><strong id="weekly">0 / 3</strong><span>envoyées</span></div><progress id="progress" value="0" max="3"></progress><input id="goal" type="number" min="1" max="30" value="3" aria-label="Nombre de candidatures visé par semaine"></div><p class="local"><span aria-hidden="true">●</span> Données sur cet appareil</p></div>
+  <div class="sidebar-bottom">
+    <div class="goal-setting"><label for="goal">Objectif par semaine</label><input id="goal" type="number" min="1" max="30" value="3"></div>
+    <p class="local" data-icon="lock">Données sur cet appareil</p>
+    <p class="small">Une candidature à la fois.</p>
+  </div>
 </aside>
 <div class="workspace">
-  <header class="topbar"><a class="mobile-brand" href="#today" aria-label="JobFlow — accueil"><span class="logo-mark" aria-hidden="true"><img src="assets/jobflow-logo.png" alt="" width="2000" height="2000"></span><span>JobFlow</span></a><span id="breadcrumb">Mon espace / Aujourd’hui</span><span class="account" id="account">Mon espace</span></header>
-  <main id="main" tabindex="-1"></main>
-  <p id="notice" class="notice" role="status" hidden></p>
+  <header class="topbar">
+    <a class="mobile-brand" href="#today" aria-label="JobFlow — accueil"><span class="logo-mark" aria-hidden="true"><img src="assets/jobflow-logo.png" alt="" width="2000" height="2000"></span><span>JobFlow</span></a>
+    <p id="breadcrumb" class="small">Mon espace / Tableau</p>
+    <div class="header-right"><span id="weekly" class="weekly" aria-live="polite">0/3 cette semaine</span><span id="account" class="account" aria-label="Mon profil"></span></div>
+  </header>
+  <main id="main" tabindex="-1"><p>Chargement de tes candidatures…</p></main>
 </div>
-<nav class="bottom-nav" aria-label="Navigation mobile"><a href="#today" data-view="today"><span aria-hidden="true">⌂</span>Aujourd’hui</a><a href="#prepare" data-view="prepare"><span aria-hidden="true">＋</span>Préparer</a><a href="#applications" data-view="applications"><span aria-hidden="true">▤</span>Candidatures</a><a href="#profile" data-view="profile"><span aria-hidden="true">◎</span>Parcours</a></nav>
+<p id="notice" class="notice" role="status" hidden></p>
+<dialog id="detail" class="drawer" aria-labelledby="detail-title"></dialog>
+<dialog id="send-dialog" aria-labelledby="send-title"></dialog>
+<nav class="bottom-nav" aria-label="Navigation mobile">
+  <a href="#today" data-view="today" data-icon="board">Tableau</a>
+  <a href="#prepare" data-view="prepare" data-icon="plus">Nouvelle</a>
+  <a href="#archives" data-view="archives" data-icon="archive">Archives</a>
+  <a href="#profile" data-view="profile" data-icon="user">Profil</a>
+</nav>
 </body>
 </html>

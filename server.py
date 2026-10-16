@@ -65,7 +65,7 @@ class Handler(SimpleHTTPRequestHandler):
                     raise ValueError('Choisis un moteur IA disponible.')
                 with GENERATION_LOCK:
                     result = engine.generate_complete_application(data['offer_text'], data['provider'], data['api_key'])
-                return self.respond({'cv':store.factual_cv(result['cv'], engine.MASTER_CV), 'letter_text':'\n\n'.join(engine.cover_letter_to_paragraphs(result['cover_letter']))})
+                return self.respond({'cv':store.factual_cv(result['cv'], engine.MASTER_CV), 'letter_text':'\n\n'.join(engine.cover_letter_to_paragraphs(result['cover_letter'])), 'company':result.get('analysis', {}).get('company', ''), 'role':result.get('analysis', {}).get('job_title', '')})
             if path == '/api/document':
                 import engine
                 cv = store.factual_cv(data.get('cv', {}), engine.MASTER_CV)
