@@ -1,0 +1,20 @@
+{
+  "candidate_name": "Prénom Nom",
+  "gender": "Féminin",
+  "default_title": "Ingénieure PMO",
+  "seo_default_title": "Ingénieure PMO",
+  "contact": {
+    "email": "",
+    "phone": "",
+    "linkedin": "",
+    "location": "",
+    "github": ""
+  },
+  "skills": [],
+  "tools": [],
+  "languages": [],
+  "experiences": [],
+  "volunteering": [],
+  "education": [],
+  "interests": []
+}

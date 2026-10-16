@@ -1,0 +1,10 @@
+data/
+Candidatures/
+__pycache__/
+.env
+design/*.png
+design/*capture*
+.DS_Store
+*.sqlite3*
+.streamlit/secrets.toml
+*.log
