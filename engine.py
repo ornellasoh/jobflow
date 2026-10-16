@@ -58,11 +58,13 @@ MOIS_FR = [
     "juillet", "août", "septembre", "octobre", "novembre", "décembre"
 ]
 
-from pathlib import Path
-_profile_path = Path(os.getenv("JOBFLOW_PROFILE_PATH", str(Path(__file__).parent / "data" / "profile.json")))
-if not _profile_path.is_file():
-    _profile_path = Path(__file__).parent / "profile.example.json"
-MASTER_CV = json.loads(_profile_path.read_text())
+from profiles import load_profile
+MASTER_CV = load_profile()
+
+def refresh_profile():
+    global MASTER_CV
+    MASTER_CV = load_profile()
+    return MASTER_CV
 
 CV_STYLES = [
     "Chronologique (classique)",
@@ -70,11 +72,12 @@ CV_STYLES = [
     "Mixte (parcours + compétences)"
 ]
 
-SYSTEM_PROMPT = f"""
+def build_system_prompt():
+    return f"""
 Tu es un expert en recrutement et en optimisation de CV pour passer les filtres ATS (Applicant Tracking Systems).
 RÈGLE D'OR ABSOLUE : LA VÉRITÉ STRICTE.
 Tu ne dois JAMAIS inventer d'expérience, d'employeur, de rôle, de date, de diplôme, de certification, d'outil, de langue ou de chiffre.
-Le parcours d'Candidate est figé dans le CV maître suivant :
+Le parcours de {MASTER_CV['candidate_name']} est figé dans le CV maître suivant :
 {json.dumps(MASTER_CV, ensure_ascii=False, indent=2)}
 
 RÈGLES DE COMPATIBILITÉ ATS & STYLE (CV) :
@@ -82,7 +85,7 @@ RÈGLES DE COMPATIBILITÉ ATS & STYLE (CV) :
 2. RÈGLE DES VERBES : Utilise TOUJOURS des verbes à L'INFINITIF en début de chaque puce.
 3. Ne modifie pas la structure de base des faits du CV.
 4. Inclus impérativement les sections `languages` et `volunteering`.
-5. Rédige l'ensemble au FÉMININ pour Candidate.
+5. Respecte l'accord grammatical indiqué : {MASTER_CV.get('gender', 'Féminin')}. Nom : {MASTER_CV['candidate_name']}.
 
 RÈGLES POUR LE CV (inspirées du guide Pôle Emploi) :
 - Le CV s'ouvre sur une ACCROCHE professionnelle combinant « Objectif » + « Compétences clés ».
@@ -114,7 +117,7 @@ La lettre doit suivre EXACTEMENT la logique argumentaire « VOUS – MOI – NOU
 - `nous` : paragraphe de PROMESSE de collaboration.
 - `action` : paragraphe de disponibilité / demande d'entretien.
 - `politesse` : formule de politesse classique et respectueuse.
-- `signature` : « Candidate ».
+- `signature` : « {MASTER_CV['candidate_name']} ».
 
 INTERDITS dans la lettre :
 - « Bonjour », « Cher Monsieur », « Chère Madame ».
@@ -123,7 +126,7 @@ INTERDITS dans la lettre :
 - Répéter l'objet dans l'accroche.
 - « Cordialement », « Bien à vous ».
 
-Rédige au FÉMININ (Candidate).
+Respecte l'accord grammatical du profil ({MASTER_CV.get('gender', 'Féminin')}).
 """
 
 def parse_ai_json(raw_text: str) -> dict:
@@ -205,7 +208,7 @@ def generate_complete_application(
     recent_news = (recent_news or "").strip()
 
     prompt = f"""
-{SYSTEM_PROMPT}
+{build_system_prompt()}
 
 MODÈLE DE CV DEMANDÉ : {cv_style}
 
@@ -236,7 +239,7 @@ Consignes prioritaires pour la lettre de motivation :
 Retourne UNIQUEMENT un objet JSON valide respectant exactement cette structure :
 {{
   "analysis": {{
-    "job_title": "Titre du poste au féminin",
+    "job_title": "Titre du poste avec les accords du profil",
     "company": "Nom de l'entreprise",
     "sector": "Secteur d'activité",
     "location": "Ville ou région",
@@ -253,8 +256,8 @@ Retourne UNIQUEMENT un objet JSON valide respectant exactement cette structure :
     }}]
   }},
   "strategy": {{
-    "cv_title": "Titre ciblé au féminin",
-    "tailored_summary": "Accroche au féminin",
+    "cv_title": "Titre ciblé avec les accords du profil",
+    "tailored_summary": "Accroche avec les accords du profil",
     "priority_skills": ["compétence 1"],
     "highlighted_tools": ["outil 1"],
     "rationale": ["explication 1"]
@@ -263,7 +266,7 @@ Retourne UNIQUEMENT un objet JSON valide respectant exactement cette structure :
     "cv_style": "chronologique|thematique|mixte",
     "seo_title": "Titre optimisé SEO (3-6 mots)",
     "accroche_objective": "Objectif professionnel + compétences clés (2-3 lignes)",
-    "tailored_summary": "Accroche courte au féminin",
+    "tailored_summary": "Accroche courte avec les accords du profil",
     "skills": ["compétence 1"],
     "skills_grouped": [
       {{ "theme": "Thème 1", "evidence": ["Preuve 1", "Preuve 2"] }}
@@ -271,7 +274,7 @@ Retourne UNIQUEMENT un objet JSON valide respectant exactement cette structure :
     "tools": ["outil 1"],
     "languages": ["Français (Langue maternelle)", "Anglais professionnel (niveau B2 / Cambridge B2 First)"],
     "experiences": [{{
-      "role": "Rôle au féminin",
+      "role": "Rôle inchangé du profil source",
       "company": "Entreprise",
       "period": "Dates inchangées",
       "bullets": ["Puce commençant par un verbe à l'infinitif"],
@@ -280,7 +283,7 @@ Retourne UNIQUEMENT un objet JSON valide respectant exactement cette structure :
       ]
     }}],
     "volunteering": [{{
-      "role": "Rôle au féminin",
+      "role": "Rôle inchangé du profil source",
       "organization": "Association",
       "period": "Dates inchangées",
       "bullets": ["Puce commençant par un verbe à l'infinitif"]
@@ -624,11 +627,12 @@ def set_font_run(run, font_name=FONT_FAMILY, size_pt=9.5, bold=False, color_rgb=
     if color_rgb:
         run.font.color.rgb = color_rgb
 
-def build_docx_documents(cv_data: dict, cover_letter_paragraphs: list, company_name: str, location: str, accent_color_rgb):
+def build_docx_documents(cv_data: dict, cover_letter_paragraphs: list, company_name: str, location: str, accent_color_rgb, source_profile=None):
+    source = source_profile or MASTER_CV
     now = datetime.now()
     today_date = f"{now.day} {MOIS_FR[now.month - 1]} {now.year}"
-    job_title = cv_data.get("cv_title", MASTER_CV["default_title"])
-    contact = MASTER_CV["contact"]
+    job_title = cv_data.get("cv_title", source["default_title"])
+    contact = source["contact"]
     contact_info = f"{location}, France | {contact['phone']} | {contact['email']} | {contact['linkedin']}"
 
     # -----------------------------------------------------------------------
@@ -644,7 +648,7 @@ def build_docx_documents(cv_data: dict, cover_letter_paragraphs: list, company_n
     # Bloc expéditeur
     p_sender = doc_lm.add_paragraph()
     p_sender.paragraph_format.space_after = Pt(2)
-    set_font_run(p_sender.add_run(MASTER_CV["candidate_name"] + "\n"), size_pt=11, bold=True, color_rgb=accent_color_rgb)
+    set_font_run(p_sender.add_run(source["candidate_name"] + "\n"), size_pt=11, bold=True, color_rgb=accent_color_rgb)
     set_font_run(p_sender.add_run(f"{job_title}\n"), size_pt=9.5)
     set_font_run(p_sender.add_run(f"{contact['phone']} | {contact['email']}\n"), size_pt=8.5, color_rgb=RGBColor(80, 80, 80))
     set_font_run(p_sender.add_run(f"{contact['linkedin']}\n"), size_pt=8.5, color_rgb=RGBColor(80, 80, 80))
@@ -703,7 +707,7 @@ def build_docx_documents(cv_data: dict, cover_letter_paragraphs: list, company_n
     p_sig = doc_lm.add_paragraph()
     p_sig.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     p_sig.paragraph_format.space_before = Pt(10)
-    set_font_run(p_sig.add_run(cl.get("signature") or MASTER_CV["candidate_name"]), size_pt=10, bold=True, color_rgb=accent_color_rgb)
+    set_font_run(p_sig.add_run(cl.get("signature") or source["candidate_name"]), size_pt=10, bold=True, color_rgb=accent_color_rgb)
 
     if not cl:
         for p_text in cover_letter_paragraphs:
@@ -724,7 +728,7 @@ def build_docx_documents(cv_data: dict, cover_letter_paragraphs: list, company_n
     p_cv_header = doc_cv.add_paragraph()
     p_cv_header.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p_cv_header.paragraph_format.space_after = Pt(2)
-    set_font_run(p_cv_header.add_run(MASTER_CV["candidate_name"] + "\n"), size_pt=13, bold=True, color_rgb=accent_color_rgb)
+    set_font_run(p_cv_header.add_run(source["candidate_name"] + "\n"), size_pt=13, bold=True, color_rgb=accent_color_rgb)
     set_font_run(p_cv_header.add_run(f"{seo_title.upper()}\n"), size_pt=10, bold=True, color_rgb=accent_color_rgb)
     set_font_run(p_cv_header.add_run(f"{contact_info}\n"), size_pt=8.5, color_rgb=RGBColor(80, 80, 80))
 
@@ -867,7 +871,7 @@ def build_docx_documents(cv_data: dict, cover_letter_paragraphs: list, company_n
         set_font_run(p_l.add_run(lang), size_pt=9.5)
 
     # Mais aussi…
-    interests = cv_data.get("interests", []) or MASTER_CV.get("interests", [])
+    interests = cv_data.get("interests", []) or source.get("interests", [])
     if interests:
         p_sec5 = doc_cv.add_paragraph()
         p_sec5.paragraph_format.space_before = Pt(4)

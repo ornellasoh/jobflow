@@ -42,3 +42,10 @@ Tests des anciens statuts, calcul de semaine, relance J+10, conservation des dat
 Scénario navigateur sur base temporaire isolée : édition de statut, archives, préparation manuelle, validation, confirmation d’envoi, persistance.
 Contrôle ordinateur à 1440 px et mobile à 390 px : pas de débordement horizontal, une seule colonne mobile et un seul bouton principal dans le contenu actif.
 Références HIG consultées : accessibilité, layout, couleur, typographie et glisser-déposer.
+
+## Profil éditable
+
+Formulaire local de coordonnées, parcours, engagements, formations et compétences.
+Un seul bouton principal enregistre le profil. Les prochaines générations relisent ce profil ;
+les documents existants exportent leur propre instantané de parcours.
+Lettre : rappel visible de la méthode Vous – Moi – Nous et contexte d’entreprise facultatif.

@@ -14,7 +14,7 @@ const paths = {
 };
 function icon(name) { return `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${paths[name] || paths.file}"/></svg>`; }
 const labels = {today:'Tableau',prepare:'Nouvelle candidature',archives:'Archives',profile:'Profil'};
-let records=[], profile={}, draft={}, stage=1, activeColumn='todo', search='', toastTimer;
+let records=[], profile={}, profileDraft=null, draft={}, stage=1, activeColumn='todo', search='', toastTimer;
 const dateISO = () => new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Paris'}).format(new Date());
 const fmt = day => day ? new Intl.DateTimeFormat('fr-FR',{day:'numeric',month:'short'}).format(new Date(day+'T12:00:00')) : '';
 function route() { const key=location.hash.slice(1); return key==='applications'?'today':key in labels?key:'today'; }
@@ -52,7 +52,7 @@ function error(id,message) {
   input?.focus();
 }
 function collect() {
-  for(const key of ['company','role','offer_url','offer_text','letter_text','follow_up_date','notes'])if($('#'+key))draft[key]=$('#'+key).value;
+  for(const key of ['company','role','offer_url','offer_text','letter_text','follow_up_date','notes','company_context','recent_news'])if($('#'+key))draft[key]=$('#'+key).value;
   if(draft.cv){
     draft.cv.cv_title=$('#cv_title')?.value??draft.cv.cv_title;
     draft.cv.seo_title=draft.cv.cv_title;
@@ -114,7 +114,7 @@ function prepare() {
 function offerStep() {
   $('#stage').innerHTML=`<section class="panel offer-panel"><h2>Quelle offre t’intéresse ?</h2><p>Ajoute une offre pour préparer une candidature qui te ressemble.</p><div class="field"><label for="offer_text">Colle le lien ou le texte de l’offre</label><textarea id="offer_text" rows="8" placeholder="Intitulé du poste, missions, compétences recherchées…">${esc(draft.offer_text||draft.offer_url)}</textarea><p id="error-offer_text" class="error" hidden></p><p class="hint">Pour l’analyse IA, colle la description complète. Un lien seul sera conservé pour le suivi.</p></div>
   <details><summary>Informations de suivi</summary><div class="fields">${field('Entreprise','company',draft.company)}${field('Poste','role',draft.role)}</div>${field('Lien de l’offre','offer_url',draft.offer_url,'url')}</details>
-  <details><summary>Réglages de génération</summary><div class="fields"><div class="field"><label for="provider">Moteur IA</label><select id="provider"><option>Gemini</option><option>DeepSeek</option></select></div>${field('Clé API · non enregistrée','api_key','','password')}</div><p class="hint"><a href="api-keys.html" target="_blank" rel="noopener noreferrer">Comment obtenir une clé Gemini ou DeepSeek ?</a></p><p class="hint">Ton parcours et l’offre sont transmis au fournisseur choisi lors de la génération.</p></details>
+  <details><summary>Contexte pour la lettre</summary><div class="field"><label for="company_context">Ce que tu sais de l’entreprise</label><textarea id="company_context" rows="3">${esc(draft.company_context)}</textarea></div><div class="field"><label for="recent_news">Actualité à mentionner, avec sa source si possible</label><textarea id="recent_news" rows="3">${esc(draft.recent_news)}</textarea></div><p class="hint">Ajoute seulement des faits vérifiés. L’IA ne recherche pas automatiquement l’actualité de l’entreprise.</p></details><details><summary>Réglages de génération</summary><div class="fields"><div class="field"><label for="provider">Moteur IA</label><select id="provider"><option>Gemini</option><option>DeepSeek</option></select></div>${field('Clé API · non enregistrée','api_key','','password')}</div><p class="hint"><a href="api-keys.html" target="_blank" rel="noopener noreferrer">Comment obtenir une clé Gemini ou DeepSeek ?</a></p><p class="hint">Ton parcours et l’offre sont transmis au fournisseur choisi lors de la génération.</p></details>
   <div class="action-footer"><button class="ghost" id="manual">Continuer sans IA</button><button class="primary" id="generate">Préparer ma candidature</button></div><p id="generation-error" class="error" role="alert" hidden></p></section>`;
   bind('manual',()=>{collect();if(!draft.offer_text?.trim()){error('offer_text','Ajoute une offre pour continuer.');return;}draft.cv ||= structuredClone(profile);draft.cv.cv_title ||= draft.role || profile.default_title;draft.cv.accroche_objective ||= '';draft.letter_text ||= '';stage=2;render();});
   bind('generate',async()=>{
@@ -123,7 +123,7 @@ function offerStep() {
     if(!$('#api_key').value.trim()){$('#api_key').closest('details').open=true;error('api_key','Renseigne ta clé API, ou choisis « Continuer sans IA ».');return;}
     const button=$('#generate');button.disabled=true;button.innerHTML='<span class="spinner" aria-hidden="true"></span>Préparation…';
     try{
-      const result=await request('/api/generate',{offer_text:draft.offer_text,provider:$('#provider').value,api_key:$('#api_key').value});
+      const result=await request('/api/generate',{offer_text:draft.offer_text,provider:$('#provider').value,api_key:$('#api_key').value,company_context:draft.company_context,recent_news:draft.recent_news});
       draft={...draft,...result,company:draft.company||result.company,role:draft.role||result.role};stage=2;render();notify('Documents préparés. À toi de les relire.');
     }catch(e){$('#generation-error').textContent=e.message;$('#generation-error').hidden=false;}
     finally{if(button.isConnected){button.disabled=false;button.textContent='Préparer ma candidature';}}
@@ -134,7 +134,7 @@ function documentsStep() {
   $('#stage').innerHTML=`<div class="summary-card"><p><strong>${esc(draft.role||'Candidature à préciser')}</strong>${draft.company?' · '+esc(draft.company):''}</p><button class="ghost" id="back-offer">Modifier l’offre</button></div>
   <div class="fields">${field('Entreprise *','company',draft.company)}${field('Poste *','role',draft.role)}</div>
   <div class="editor-grid"><section class="panel"><h2>Ton CV adapté</h2><p class="small">Le titre et l’accroche s’adaptent. Ton parcours reste intact.</p>${field('Titre du CV','cv_title',cv.cv_title||cv.seo_title||draft.role)}<div class="field"><label for="summary">Résumé professionnel</label><textarea id="summary" rows="5">${esc(cv.accroche_objective)}</textarea></div><button id="download-cv">${icon('download')}Télécharger le CV Word</button><details><summary>Aperçu du CV</summary>${editorPreview(cv)}</details></section>
-  <section class="panel"><h2>Ta lettre de motivation</h2><p class="small">Relie les besoins du poste à tes réalisations.</p><div class="field"><label for="letter_text">Texte de la lettre</label><textarea id="letter_text" rows="13">${esc(draft.letter_text)}</textarea></div><button id="download-letter">${icon('download')}Télécharger la lettre Word</button></section></div>
+  <section class="panel"><h2>Ta lettre de motivation</h2><p class="small">Méthode Vous – Moi – Nous : les enjeux de l’entreprise, tes preuves, puis votre collaboration.</p><div class="field"><label for="letter_text">Texte de la lettre</label><textarea id="letter_text" rows="13">${esc(draft.letter_text)}</textarea></div><button id="download-letter">${icon('download')}Télécharger la lettre Word</button></section></div>
   <div class="action-footer"><button class="ghost" id="save">Enregistrer le brouillon</button><button class="primary" id="validate">Valider les documents${icon('arrow')}</button></div>`;
   bind('back-offer',()=>{collect();stage=1;render();});
   bind('save',async()=>{if(!validateIdentity())return;draft=await saveRecord(draft);notify('Brouillon enregistré.');});
@@ -175,11 +175,46 @@ function archives(){
   document.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>openDetail(b.dataset.open));
   bind('export',()=>download(new Blob([JSON.stringify(records,null,2)],{type:'application/json'}),'jobflow.json'));
 }
-function renderProfile(){
-  $('#main').innerHTML=`<section class="intro"><div><h1>Profil</h1><p>Ton parcours est le point de départ de chaque candidature.</p></div></section><section class="panel profile-details"><h2>${esc(profile.candidate_name||'Mon profil')}</h2><p>${esc(profile.default_title)}</p>${profile.experiences?.length?profile.experiences.map(e=>`<details><summary>${esc(e.role)} · ${esc(e.company)}</summary><p class="small">${esc(e.period)}</p><ul>${(e.bullets||[]).map(b=>`<li>${esc(b)}</li>`).join('')}</ul></details>`).join(''):'<p>Ton parcours n’est pas encore renseigné. Ajoute ton profil local pour personnaliser tes documents.</p>'}<p class="hint">Vérifie les dates et les réalisations de ton parcours avant de préparer tes documents.</p></section>`;
+function listField(label,id,values=[]) {
+  return `<div class="field"><label for="${id}">${label}</label><textarea id="${id}" rows="3">${esc(values.join('\n'))}</textarea><p class="hint">Un élément par ligne.</p></div>`;
 }
+function collectProfile(){
+  if(!$('#profile-form') || !profileDraft)return;
+  for(const key of ['candidate_name','default_title','gender'])profileDraft[key]=$('#profile-'+key).value;
+  profileDraft.seo_default_title=profileDraft.default_title;
+  profileDraft.contact ||= {};
+  for(const key of ['email','phone','linkedin','location','github'])profileDraft.contact[key]=$('#contact-'+key).value;
+  for(const key of ['skills','tools','languages','interests'])profileDraft[key]=$('#profile-'+key).value.split('\n').map(x=>x.trim()).filter(Boolean);
+  for(const [section,fields] of Object.entries({experiences:['role','company','period'],volunteering:['role','organization','period'],education:['title','institution','year']})){
+    (profileDraft[section]||[]).forEach((item,index)=>{
+      for(const key of fields)item[key]=$(`#${section}-${index}-${key}`).value;
+      if(section!=='education')item.bullets=$(`#${section}-${index}-bullets`).value.split('\n').map(x=>x.trim()).filter(Boolean);
+    });
+  }
+}
+function renderProfile(){
+  profileDraft ||= structuredClone(profile);
+  const p=profileDraft;
+  const sections={experiences:{title:'Expériences',add:'Ajouter une expérience',fields:{role:'Rôle',company:'Entreprise',period:'Période'}},volunteering:{title:'Engagements bénévoles',add:'Ajouter un engagement',fields:{role:'Rôle',organization:'Association',period:'Période'}},education:{title:'Formations',add:'Ajouter une formation',fields:{title:'Diplôme ou formation',institution:'Établissement',year:'Année ou période'}}};
+  $('#main').innerHTML=`<section class="intro"><div><h1>Profil</h1><p>Ton parcours est la source de tes prochaines candidatures.</p></div></section><form id="profile-form" class="stack profile-details"><section class="panel"><h2>Informations personnelles</h2><p class="small">Ces informations restent sur cet appareil. Elles ne sont pas publiées sur GitHub.</p><div class="fields">${field('Nom complet *','profile-candidate_name',p.candidate_name)}${field('Titre professionnel *','profile-default_title',p.default_title)}</div><div class="field"><label for="profile-gender">Accords de rédaction</label><select id="profile-gender"><option ${p.gender==='Féminin'?'selected':''}>Féminin</option><option ${p.gender==='Masculin'?'selected':''}>Masculin</option><option ${p.gender==='Neutre'?'selected':''}>Neutre</option></select></div><div class="fields">${[['email','Email','email'],['phone','Téléphone','tel'],['location','Ville ou région','text'],['linkedin','Profil LinkedIn','text'],['github','Profil GitHub','text']].map(([key,label,type])=>field(label,'contact-'+key,p.contact?.[key],type)).join('')}</div></section>
+  ${Object.entries(sections).map(([section,config])=>`<section class="panel"><h2>${config.title}</h2>${(p[section]||[]).map((item,index)=>`<fieldset class="profile-item"><legend>${config.title==='Formations'?'Formation':config.title==='Expériences'?'Expérience':'Engagement'} ${index+1}</legend><div class="fields">${Object.entries(config.fields).map(([key,label])=>field(label,`${section}-${index}-${key}`,item[key])).join('')}</div>${section!=='education'?listField('Réalisations et résultats vérifiés',`${section}-${index}-bullets`,item.bullets):''}<button type="button" class="ghost" data-remove="${section}" data-index="${index}">Retirer cet élément</button></fieldset>`).join('')}<button type="button" class="ghost" data-add="${section}">${icon('plus')}${config.add}</button></section>`).join('')}
+  <section class="panel"><h2>Compétences et centres d’intérêt</h2>${listField('Compétences','profile-skills',p.skills)}${listField('Outils','profile-tools',p.tools)}${listField('Langues et niveaux','profile-languages',p.languages)}${listField('Centres d’intérêt','profile-interests',p.interests)}</section><div class="action-footer"><p class="small">Les prochaines générations utiliseront ce profil. Les candidatures existantes sont conservées.</p><button type="submit" class="primary" id="save-profile">Enregistrer mon profil</button></div><p class="error" id="profile-error" role="alert" hidden></p></form>`;
+  document.querySelectorAll('#profile-form button:not([type])').forEach(b=>b.type='button');
+  document.querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>{collectProfile();const section=b.dataset.add;profileDraft[section] ||= [];profileDraft[section].push(section==='education'?{title:'',institution:'',year:''}:{role:'',company:'',organization:'',period:'',bullets:[]});renderProfile();});
+  document.querySelectorAll('[data-remove]').forEach(b=>b.onclick=()=>{collectProfile();profileDraft[b.dataset.remove].splice(Number(b.dataset.index),1);renderProfile();});
+  $('#profile-form').onsubmit=async event=>{
+    event.preventDefault();collectProfile();
+    if(!p.candidate_name.trim()){error('profile-candidate_name','Renseigne ton nom.');return;}
+    if(!p.default_title.trim()){error('profile-default_title','Renseigne ton titre professionnel.');return;}
+    const button=$('#save-profile');button.disabled=true;
+    try{profile=await request('/api/profile',profileDraft);profileDraft=null;notify('Profil enregistré. Tes prochaines candidatures utiliseront ces informations.');render();}
+    catch(e){$('#profile-error').textContent=e.message;$('#profile-error').hidden=false;}
+    finally{if(button.isConnected)button.disabled=false;}
+  };
+}
+
 for(const element of document.querySelectorAll('[data-icon]'))element.insertAdjacentHTML('afterbegin',icon(element.dataset.icon));
 $('#goal').onchange=()=>{try{localStorage.setItem('jobflow-goal',String(Math.min(30,Math.max(1,Number($('#goal').value)||3))));}catch{}updateGoal();};
-window.addEventListener('hashchange',()=>{collect();render();});
+window.addEventListener('hashchange',()=>{collect();collectProfile();render();});
 window.addEventListener('beforeunload',e=>{if(route()==='prepare' && $('#offer_text')?.value && !draft.id){e.preventDefault();e.returnValue='';}});
 Promise.all([request('/api/applications'),request('/api/profile')]).then(([a,p])=>{records=a;profile=p;render();}).catch(e=>{$('#main').innerHTML='<h1>Connexion indisponible</h1><p>Recharge la page une fois le serveur JobFlow disponible.</p>';notify(e.message);});

@@ -24,7 +24,9 @@ La génération transmet le CV source et le texte de l’offre au fournisseur ch
 - Archives séparées pour les refus, sans suppression des candidatures.
 - Parcours offre → CV & lettre → envoi & suivi.
 - Génération Gemini ou DeepSeek ; titre, résumé et lettre éditables.
-- Faits du parcours conservés depuis le profil source.
+- Profil modifiable : coordonnées, expériences, formations, engagements, compétences et langues.
+- Faits du parcours conservés depuis le profil source ; mise à jour utilisée dès la prochaine génération.
+- Lettre préparée selon la méthode Vous – Moi – Nous, avec contexte d’entreprise facultatif.
 - Aperçu du contenu et exports Word.
 - Documents liés à la candidature et sauvegarde locale SQLite.
 - Confirmation d’envoi, date de relance, recherche et export JSON.
@@ -36,6 +38,7 @@ La génération transmet le CV source et le texte de l’offre au fournisseur ch
 - `server.py` : API locale et serveur statique.
 - `engine.py` : moteur issu de CV Generator.
 - `store.py` : stockage et conservation des faits.
+- `profiles.py` : validation, sauvegarde locale privée et relecture du profil.
 - `profile.example.json` : profil anonyme à personnaliser localement.
 - `app.py` : premier prototype Streamlit conservé.
 - `tests/` : vérifications du parcours.

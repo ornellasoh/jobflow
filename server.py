@@ -7,6 +7,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 import store
+import profiles
 
 WEB = Path(__file__).parent / 'web'
 GENERATION_LOCK = threading.Lock()
@@ -33,8 +34,7 @@ class Handler(SimpleHTTPRequestHandler):
         if path == '/api/applications':
             return self.respond(store.all_records())
         if path == '/api/profile':
-            from engine import MASTER_CV
-            return self.respond(MASTER_CV)
+            return self.respond(profiles.load_profile())
         if path.startswith('/api/'):
             return self.respond({'error':'Ressource introuvable.'}, 404)
         return super().do_GET()
@@ -54,6 +54,9 @@ class Handler(SimpleHTTPRequestHandler):
             if not isinstance(data, dict):
                 raise ValueError('Objet JSON requis.')
             path = urlsplit(self.path).path
+            if path == '/api/profile':
+                with GENERATION_LOCK:
+                    return self.respond(profiles.save_profile(data))
             if path == '/api/applications':
                 data.pop('api_key', None)
                 return self.respond(store.save(data))
@@ -64,13 +67,17 @@ class Handler(SimpleHTTPRequestHandler):
                 if data.get('provider') not in ['Gemini', 'DeepSeek']:
                     raise ValueError('Choisis un moteur IA disponible.')
                 with GENERATION_LOCK:
-                    result = engine.generate_complete_application(data['offer_text'], data['provider'], data['api_key'])
-                return self.respond({'cv':store.factual_cv(result['cv'], engine.MASTER_CV), 'letter_text':'\n\n'.join(engine.cover_letter_to_paragraphs(result['cover_letter'])), 'company':result.get('analysis', {}).get('company', ''), 'role':result.get('analysis', {}).get('job_title', '')})
+                    engine.refresh_profile()
+                    result = engine.generate_complete_application(data['offer_text'], data['provider'], data['api_key'], company_context=data.get('company_context', ''), recent_news=data.get('recent_news', ''))
+                    response = {'cv':store.factual_cv(result['cv'], engine.MASTER_CV), 'letter_text':'\n\n'.join(engine.cover_letter_to_paragraphs(result['cover_letter'])), 'company':result.get('analysis', {}).get('company', ''), 'role':result.get('analysis', {}).get('job_title', '')}
+                return self.respond(response)
             if path == '/api/document':
                 import engine
-                cv = store.factual_cv(data.get('cv', {}), engine.MASTER_CV)
                 with GENERATION_LOCK:
-                    docs = engine.build_docx_documents(cv, data.get('letter_text', '').split('\n\n'), data.get('company', ''), '', engine.COLOR_PALETTE['Bleu Roi']['rgb'])
+                    engine.refresh_profile()
+                    # Un document déjà préparé garde le parcours sauvegardé avec sa candidature.
+                    cv = data.get('cv', {})
+                    docs = engine.build_docx_documents(cv, data.get('letter_text', '').split('\n\n'), data.get('company', ''), cv.get('contact', {}).get('location', ''), engine.COLOR_PALETTE['Bleu Roi']['rgb'], source_profile=cv if cv.get('candidate_name') and cv.get('contact') else None)
                 out = io.BytesIO()
                 docs[1 if data.get('kind') == 'letter' else 0].save(out)
                 return self.respond(out.getvalue(), mime='application/vnd.openxmlformats-officedocument.wordprocessingml.document')

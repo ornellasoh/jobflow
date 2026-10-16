@@ -180,3 +180,5 @@ dialog.drawer { position:fixed; inset:0 0 0 auto; margin:0; height:100dvh; max-h
 
 @media(max-width:700px){.board-note .desktop-hint{display:none}.board-note .mobile-hint{display:inline}}
 @media(min-width:701px){.board-note .mobile-hint{display:none}}
+
+.profile-item{border:1px solid var(--line);border-radius:var(--radius-md);padding:16px;margin:24px 0;min-width:0}.profile-item legend{font-size:14px;font-weight:600;padding:0 8px}.profile-item .field:last-child{margin-bottom:0}
