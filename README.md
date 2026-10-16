@@ -62,3 +62,7 @@ export PDF et installation PWA restent à réaliser. Validation sur téléphone 
 
 Le serveur local ne doit pas être exposé sur Internet : ajouter authentification, isolation des comptes,
 protection des secrets et HTTPS avant hébergement.
+
+## Obtenir une clé API
+
+[Tutoriel Gemini et DeepSeek](docs/CLES_API.md), également accessible depuis les réglages de génération de la web app.
